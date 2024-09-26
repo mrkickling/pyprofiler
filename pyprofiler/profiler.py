@@ -44,6 +44,11 @@ class PyProfiler:
         function_identifier = self.get_function_identifier(fun)
         self.printer.print(f"Profiling function {function_identifier}")
 
+        # Run cProfile to see stack trace
+        if self.verbose:
+            profiler = cProfile.Profile()
+            profiler.enable()
+
         time_taken = timeit.Timer(
             lambda: fun(*args)
         ).timeit(number=num_repeated)
@@ -52,11 +57,7 @@ class PyProfiler:
             f"{round(time_taken, 4)}s"
         )
 
-        # Run cProfile to see stack trace
         if self.verbose:
-            profiler = cProfile.Profile()
-            profiler.enable()
-            fun(*args)
             profiler.disable()
             stats = pstats.Stats(profiler)
             stats.sort_stats('cumtime').print_stats(10)
