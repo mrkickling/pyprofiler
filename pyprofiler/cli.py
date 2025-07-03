@@ -25,8 +25,8 @@ def cli():
     parser.add_argument(
         'pyprofile_file', type=str,
         help=(
-            'Filename of pyprofile file to run profiling on'
-            '(must contain at least one class that inherits from PyProfile)'
+            'Filename of pyprofile file to run profiling on '
+            '(must contain functions with names starting with "profile_")'
         )
     )
     args = parser.parse_args()

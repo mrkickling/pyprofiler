@@ -13,22 +13,32 @@ In virtual environment, install the package from this directory with: `pip insta
 
 ### Setup
 
-Create a python module that contains a class which inherits from pyprofiler.profiler.PyProfiler.
+Create a python module that contains functions/methods that start with `profile_`.
 
-Create methods that start with `profile_`.
+```
+usage: pyprofiler [-h] [-n NAME_OF_RUN] [-c COMPARE_WITH] [-v] pyprofile_file
 
-The functions you want to profile in each method should be sent to `self.pyprofile` (with additional arguments). self.pyprofile takes a lambda/function/callable and arguments, and performs profiling on it.
+positional arguments:
+  pyprofile_file        Filename of pyprofile file to run profiling on
+                        (must contain functions with names starting with "profile_")
 
-usage: `pyprofiler [-h] {compare,profile}`
+options:
+  -h, --help            show this help message and exit
+  -n NAME_OF_RUN, --name_of_run NAME_OF_RUN
+                        Name of this profiling run
+  -c COMPARE_WITH, --compare_with COMPARE_WITH
+                        Name of profiling run to compare with
+  -v, --verbose         Show more info like stack strace for profiling
+```
 
 ### Run profiler
 
-Run profiler (and show change in percentage from previous run)
+Run profiler and output data to file 'profiling_results.yml'. 
 
-`pyprofiler profile [-h] [-n NAME_OF_RUN] [-v] pyprofile_file`
+`pyprofiler -n <NAME_OF_RUN> <PYPROFILE_FILE>`
 
 ### Compare runs
 
-Compare a run to a different run.
+Compare a run to a different run that is already stored in 'profiling_results.yml'
 
-`pyprofiler compare [-h] profile_run_name_before profile_run_name_after`
+`pyprofiler -n <NAME_OF_RUN> <PYPROFILE_FILE> -c <PREVIOUS_RUN_NAME>`
