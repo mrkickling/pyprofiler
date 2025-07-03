@@ -1,34 +1,30 @@
-
-import importlib.util
 import sys
-import inspect
+import importlib.util
 from pathlib import Path
+import yaml
+
+def read_yml_file(path: str) -> dict:
+    """Get results from previous profiling runs"""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return dict(yaml.safe_load(f))
+    except (FileNotFoundError, TypeError):
+        return {}
 
 
-def load_classes_from_file(filename: str, parent_class_name: str):
+def write_yml_file(path: str, data: dict) -> None:
+    with open(path, 'w', encoding='utf8') as f:
+        yaml.dump(data, f)
+
+
+def load_module(filename: str):
     """Load subclasses of `parent_class_name` from given filename module"""
     module_name = Path(filename).stem
     spec = importlib.util.spec_from_file_location(module_name, filename)
+    assert spec, f"No parseable module in {filename}"
+
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
 
-    # Get the parent class from the module
-    parent_class = None
-    for name, obj in inspect.getmembers(module, inspect.isclass):
-        if name == parent_class_name:
-            parent_class = obj
-            break
-
-    if not parent_class:
-        raise ValueError(
-            f"Parent class '{parent_class_name}' not found in {filename}"
-        )
-
-    # Get all classes that are subclasses of the parent class
-    subclasses = [
-        obj for name, obj in inspect.getmembers(module, inspect.isclass)
-        if issubclass(obj, parent_class) and obj is not parent_class
-    ]
-
-    return subclasses
+    return module

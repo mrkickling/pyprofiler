@@ -7,26 +7,25 @@ from datetime import datetime
 import pstats
 import time
 import timeit
+import logging
 
-import yaml
-
-from pyprofiler.utils import load_classes_from_file
-from pyprofiler.printer import Printer, Color
+from pyprofiler.utils import load_module, read_yml_file, write_yml_file
+from pyprofiler.color import Color, text_in_color
 
 HISTORY_FILE = "profiling_results.yml"
-COMPARE_FILE = "profiling_compare.yml"
+logger = logging.getLogger(__name__)
 
 
 class PyProfiler:
-    """Run profiling on functions"""
-    printer = Printer()
+    """Run profiling on methods"""
 
     def __init__(self, name=None, verbose=False):
         self.timestamp = round(time.time())
-        self.name = name or datetime.strftime(datetime.now(), "%Y-%m-%d-%H:%M:%S")
+        self.name = (
+            name or datetime.strftime(datetime.now(), "%Y-%m-%d-%H:%M:%S")
+        )
         self.verbose = verbose
-        print(f"Created PyProfiler with name {self.name}.")
-
+        logger.info("Created PyProfiler with name %s", self.name)
 
     def get_function_identifier(self, fun):
         """Append module name with function name to create a unique
@@ -36,82 +35,48 @@ class PyProfiler:
         return f"{module_name or ''}:{function_name}"
 
     def pyprofile(
-            self, fun, *args,
+            self,
+            fun,
+            *args,
             store_results=True,
-            num_repeated=1000
         ):
         """Run cProfile for a function with arguments given, print results"""
+
         function_identifier = self.get_function_identifier(fun)
-        self.printer.print(f"Profiling function {function_identifier}")
+        print(f"Profiling function {function_identifier}")
 
         # Run cProfile to see stack trace
+        c_profiler = None
         if self.verbose:
-            profiler = cProfile.Profile()
-            profiler.enable()
+            c_profiler = cProfile.Profile()
+            c_profiler.enable()
 
         time_taken = timeit.Timer(
             lambda: fun(*args)
-        ).timeit(number=num_repeated)
-        self.printer.print(
-            f"\t Total time (repeated {num_repeated}) was "
-            f"{round(time_taken, 4)}s"
+        ).timeit(number=1)
+
+        print(
+            f"\t Total time was "
+            f"{round(time_taken, 8)}s"
         )
 
-        if self.verbose:
-            profiler.disable()
-            stats = pstats.Stats(profiler)
+        if c_profiler:
+            c_profiler.disable()
+            stats = pstats.Stats(c_profiler)
             stats.sort_stats('cumtime').print_stats(10)
 
         if store_results:
-            self.store_results(function_identifier, time_taken / num_repeated)
-
-    @classmethod
-    def create_profiler(
-        cls, pyprofiler_file, requested_run_name=None, verbose=False):
-        """Create and run profiling with a PyProfiler file"""
-
-        classes = load_classes_from_file(pyprofiler_file, cls.__name__)
-
-        old_results = cls.get_old_results()
-
-        run_name = requested_run_name
-        if run_name:
-            appended_int = 2
-            while run_name in old_results:
-                run_name = f"{requested_run_name}{appended_int}"
-                appended_int += 1
-
-        for pyprofiler_class in classes:
-            profiler = pyprofiler_class(run_name, verbose=verbose)
-            for method_name in dir(profiler):
-                if callable(getattr(profiler, method_name))\
-                and method_name.startswith('profile_'):
-                    method = getattr(profiler, method_name)
-                    method()
-
-            # Compare previous and current latest run
-            run_name_before, run_name_after = profiler.get_two_latest_runs()
-            profiler.compare_results(run_name_before, run_name_after)
-
-    @classmethod
-    def get_old_results(cls) -> dict:
-        """Get results from previous profiling runs"""
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                return dict(yaml.safe_load(f))
-        except (FileNotFoundError, TypeError):
-            return {}
+            self.store_results(function_identifier, time_taken)
 
     def store_results(self, function_name, time_taken_avg) -> None:
         """Store the results from the profiling run"""
-        results = self.get_old_results()
+        results = read_yml_file(HISTORY_FILE)
         results.setdefault(self.name, {})
         results[self.name]["timestamp"] = self.timestamp
-        results[self.name].setdefault("functions", {})
-        results[self.name]["functions"][function_name] = time_taken_avg
-
-        with open(HISTORY_FILE, 'w', encoding='utf8') as f:
-            yaml.dump(results, f)
+        results[self.name].setdefault("methods", {})
+        results[self.name]["methods"][function_name] = time_taken_avg
+        write_yml_file(HISTORY_FILE, results)
+        print(f"Saved profiling run in {HISTORY_FILE}")
 
     def get_two_latest_runs(self):
         """Find the two latest ran profile names"""
@@ -120,7 +85,7 @@ class PyProfiler:
         previous_latest_run = {}
         previous_latest_run_name = ""
 
-        profile_runs = self.get_old_results()
+        profile_runs = read_yml_file(HISTORY_FILE)
         for run_name, run in profile_runs.items():
             if run.get('timestamp') > latest_run.get("timestamp", -1):
                 previous_latest_run = latest_run
@@ -143,51 +108,74 @@ class PyProfiler:
             color = Color.RED
 
         diff_perc_string = f"{'+' if diff_perc > 0 else ''}{diff_perc}%"
-        return cls.printer.text_in_color(diff_perc_string, color)
+        return text_in_color(diff_perc_string, color)
 
     @classmethod
     def compare_results(
-        cls, profile_run_name_before, profile_run_name_after) -> dict:
-        """Compare results to see improvement between two profiling runs"""
+        cls, profile_run_name_before, profile_run_name_after) -> None:
+        """
+        Compare results and print time difference between two profiling runs
+        """
 
-        profile_runs = cls.get_old_results()
-        results = {"functions": {}}
-
-        results["from"] = profile_run_name_before
-        results["to"] = profile_run_name_after
-
+        profile_runs = read_yml_file(HISTORY_FILE)
         profile_run_before = profile_runs.get(
-            profile_run_name_before, {}).get("functions", {})
+            profile_run_name_before, {}).get("methods", {})
         profile_run_after = profile_runs.get(
-            profile_run_name_after, {}).get("functions", {})
+            profile_run_name_after, {}).get("methods", {})
 
         if not profile_run_before or not profile_run_after:
-            cls.printer.print(
-                "Can not compare since there were no results to compare with"
+            raise LookupError(
+                "Can not compare since there were no previous "
+                "results to compare with"
             )
-            return
 
-        for fun_signature, duration_after in profile_run_after.items():
+        print(
+            "================================================================"
+        )
+        print(
+            f"DIFF FROM {profile_run_name_before} TO {profile_run_name_after}"
+        )
+
+        for func_signature, duration_after in profile_run_after.items():
             try:
-                duration_before = profile_run_before.get(fun_signature)
-                diff_s = duration_after - duration_before
+                duration_before = profile_run_before.get(func_signature)
                 diff_perc = (
                     100 * (duration_after - duration_before) / duration_before
                 )
-                results["functions"][fun_signature] = {}
-
-                diff_s_string = f"{'+' if diff_s > 0 else ''}{round(diff_s, 4)}s"
-                results["functions"][fun_signature]['diff_s'] = diff_s_string
-
-                diff_perc_str = cls.format_time_diff_percentage(round(diff_perc, 2))
-                results["functions"][fun_signature]['diff_percentage'] = diff_perc_str
+                diff_perc_str = (
+                    cls.format_time_diff_percentage(round(diff_perc, 2))
+                )
+                print(f"{func_signature}: {diff_perc_str}")
 
             except TypeError:
                 # If one of the timestamps did not have the function
-                print(f"Failed to find function {fun_signature} in previous run")
+                print(
+                    f"Failed to find function {func_signature} in previous run"
+                )
                 continue
 
-        print("================================================================")
-        print(f"DIFF FROM {profile_run_name_before} TO {profile_run_name_after}")
-        for func_signature, diffs in results["functions"].items():
-            print(f"{func_signature}: {diffs['diff_percentage']}")
+
+
+def run_profiler(
+    pyprofiler_file, requested_run_name: str, verbose=False
+):
+    """Create and run profiling with a PyProfiler file"""
+
+    module = load_module(pyprofiler_file)
+    profiler = PyProfiler(requested_run_name, verbose=verbose)
+
+    for method_name in dir(module):
+
+        if (method_name.startswith('profile_') and
+            callable(getattr(module, method_name))):
+            method = getattr(module, method_name)
+            profiler.pyprofile(method)
+
+    # Compare previous and current latest run
+    run_name_before, run_name_after = profiler.get_two_latest_runs()
+
+    try:
+        profiler.compare_results(run_name_before, run_name_after)
+    except LookupError:
+        print("Could not compare since there were no previous run"
+    )
