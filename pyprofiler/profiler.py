@@ -8,6 +8,7 @@ import pstats
 import time
 import timeit
 import logging
+from typing import Optional
 
 from pyprofiler.utils import load_module, read_yml_file, write_yml_file
 from pyprofiler.color import Color, text_in_color
@@ -16,7 +17,7 @@ HISTORY_FILE = "profiling_results.yml"
 logger = logging.getLogger(__name__)
 
 
-class PyProfiler:
+class PyProfilerRun:
     """Run profiling on methods"""
 
     def __init__(self, name=None, verbose=False):
@@ -157,25 +158,25 @@ class PyProfiler:
 
 
 def run_profiler(
-    pyprofiler_file, requested_run_name: str, verbose=False
+    pyprofiler_file,
+    run_name: str,
+    compare_with: Optional[str] = None,
+    verbose=False
 ):
     """Create and run profiling with a PyProfiler file"""
 
     module = load_module(pyprofiler_file)
-    profiler = PyProfiler(requested_run_name, verbose=verbose)
+    profiler = PyProfilerRun(run_name, verbose=verbose)
 
     for method_name in dir(module):
-
+        # Profile each method in the given module
         if (method_name.startswith('profile_') and
             callable(getattr(module, method_name))):
             method = getattr(module, method_name)
             profiler.pyprofile(method)
 
-    # Compare previous and current latest run
-    run_name_before, run_name_after = profiler.get_two_latest_runs()
-
-    try:
-        profiler.compare_results(run_name_before, run_name_after)
-    except LookupError:
-        print("Could not compare since there were no previous run"
-    )
+    if compare_with:
+        try:
+            profiler.compare_results(compare_with, run_name)
+        except LookupError:
+            print("Could not compare since there were no previous run")

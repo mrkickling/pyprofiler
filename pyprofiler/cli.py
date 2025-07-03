@@ -1,5 +1,5 @@
 import argparse
-from pyprofiler.profiler import PyProfiler, run_profiler
+from pyprofiler.profiler import run_profiler
 
 def cli():
     """CLI for PyProfiler - the easy profiler"""
@@ -12,6 +12,10 @@ def cli():
     parser.add_argument(
         '-n', '--name_of_run',
         type=str, help='Name of this profiling run'
+    )
+    parser.add_argument(
+        '-c', '--compare_with',
+        type=str, help='Name of profiling run to compare with'
     )
     parser.add_argument(
         '-v', '--verbose',
@@ -28,7 +32,8 @@ def cli():
     args = parser.parse_args()
     run_profiler(
         args.pyprofile_file,
-        requested_run_name=args.name_of_run,
+        run_name=args.name_of_run,
+        compare_with=args.compare_with,
         verbose=args.verbose
     )
 
